@@ -50,10 +50,10 @@ async def deploy_code(file: UploadFile, app_name: str = Form(...)):
                     return os.path.join(dirpath, file)
         return None
 
-    # Search for required files
+
     main_py = find_file("main.py", project_path)
     requirements_txt = find_file("requirements.txt", project_path)
-    dockerfile = find_file("DockerFile", project_path)
+    dockerfile = find_file("Dockerfile", project_path)  # lowercase f
 
     missing_files = []
     if not main_py:
@@ -61,18 +61,18 @@ async def deploy_code(file: UploadFile, app_name: str = Form(...)):
     if not requirements_txt:
         missing_files.append("requirements.txt")
     if not dockerfile:
-        missing_files.append("DockerFile")
+        missing_files.append("Dockerfile")
 
     if missing_files:
         raise HTTPException(
             status_code=400,
             detail=f"Zip is missing required file(s): {', '.join(missing_files)} (case-insensitive)"
         )
-    
+
     # Move Dockerfile to root if needed
     if os.path.dirname(dockerfile) != project_path:
         print(f"[DEBUG] Moving Dockerfile from {dockerfile} to project root")
-        target_path = os.path.join(project_path, "DockerFile")
+        target_path = os.path.join(project_path, "Dockerfile")
         os.replace(dockerfile, target_path)
         dockerfile = target_path
 
