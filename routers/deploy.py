@@ -52,10 +52,18 @@ async def deploy_code(file: UploadFile, app_name: str = Form(...)):
     requirements_txt = find_file("requirements.txt", project_path)
     dockerfile = find_file("Dockerfile", project_path)
 
-    if not (main_py and requirements_txt and dockerfile):
+    missing_files = []
+    if not main_py:
+        missing_files.append("main.py")
+    if not requirements_txt:
+        missing_files.append("requirements.txt")
+    if not dockerfile:
+        missing_files.append("Dockerfile")
+
+    if missing_files:
         raise HTTPException(
             status_code=400,
-            detail="Zip must contain main.py, requirements.txt, and Dockerfile (at any level)"
+            detail=f"Zip is missing required file(s): {', '.join(missing_files)} (at any level)"
         )
 
     # Build and run Docker container
