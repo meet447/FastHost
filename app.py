@@ -1,7 +1,5 @@
-from fastapi import FastAPI, UploadFile, Form, HTTPException
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi import FastAPI
 import docker
-from pyngrok import ngrok
 import dotenv
 from routers.deploy import router as deploy_router
 from routers.controls import router as controls_router
@@ -11,9 +9,9 @@ from routers.logs import router as logs_router
 dotenv.load_dotenv()
 
 app = FastAPI()
-app.include_router(controls_router, prefix="/controls")
-app.include_router(logs_router, prefix="/logs")
-app.include_router(deploy_router, prefix="/deploy")
+app.include_router(controls_router, prefix="/")
+app.include_router(logs_router, prefix="/")
+app.include_router(deploy_router, prefix="/")
 
 client = docker.from_env()
 

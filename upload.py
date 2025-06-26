@@ -32,7 +32,7 @@ if __name__ == "__main__":
     folder_to_zip = "examples"               # Folder with main.py and requirements.txt
     zip_output = "project.zip"
     app_name = "maouapp"
-    server_url =os.getenv("SERVER_URL_WITHOUT_PORT")
+    server_url = 'http://192.168.29.195:8000'  # Replace with your server URL
 
     print("📦 Zipping project...")
     zip_folder(folder_to_zip, zip_output)
