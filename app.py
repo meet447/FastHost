@@ -1,27 +1,25 @@
-from fastapi import FastAPI, UploadFile, Form, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, UploadFile, Form, HTTPException
+from fastapi.responses import JSONResponse, HTMLResponse
 import docker
-import os, uuid, shutil, zipfile, time
+import os
+import uuid
+import shutil
+import zipfile
+import time
+from pyngrok import ngrok
 
 app = FastAPI()
 client = docker.from_env()
 
-# CORS support
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Serve static files for dashboard
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
 PROJECTS_DIR = "./projects"
 os.makedirs(PROJECTS_DIR, exist_ok=True)
+
+# Create Docker network if not exists
+NETWORK_NAME = "fasthost-net"
+try:
+    client.networks.get(NETWORK_NAME)
+except docker.errors.NotFound:
+    client.networks.create(NETWORK_NAME)
 
 @app.get("/")
 def dashboard():
@@ -31,37 +29,29 @@ def dashboard():
     <head>
         <title>FastHost Dashboard</title>
         <style>
-            body { font-family: sans-serif; padding: 20px; }
-            table { border-collapse: collapse; width: 100%; }
-            th, td { padding: 8px; border: 1px solid #ccc; text-align: left; }
-            th { background: #f4f4f4; }
-            button { padding: 5px 10px; margin-right: 5px; }
+            body { font-family: Arial, sans-serif; padding: 20px; background-color: #f4f4f4; }
+            table { border-collapse: collapse; width: 100%; background: white; }
+            th, td { border: 1px solid #ccc; padding: 10px; text-align: left; }
+            th { background-color: #eee; }
+            a { margin-right: 10px; text-decoration: none; color: #007BFF; }
         </style>
     </head>
     <body>
         <h1>🚀 FastHost Dashboard</h1>
         <table>
-            <tr>
-                <th>Name</th><th>Status</th><th>Port</th><th>Actions</th>
-            </tr>
+            <tr><th>Name</th><th>Status</th><th>Actions</th></tr>
     """
-    for c in containers:
-        ports = client.api.port(c.id, 8080)
-        port = ports[0]['HostPort'] if ports else "-"
-        html += f"""
-        <tr>
-            <td>{c.name}</td>
-            <td>{c.status}</td>
-            <td>{port}</td>
-            <td>
-                <a href='/logs/{c.name}' target='_blank'>Logs</a>
-                <form style='display:inline' action='/stop/{c.name}' method='post'><button>Stop</button></form>
-                <form style='display:inline' action='/pause/{c.name}' method='post'><button>Pause</button></form>
-                <form style='display:inline' action='/start/{c.name}' method='post'><button>Start</button></form>
-            </td>
-        </tr>
-        """
-    html += "</table></body></html>"
+    for container in containers:
+        html += f"<tr><td>{container.name}</td><td>{container.status}</td><td>"
+        html += f"<a href='/logs/{container.name}' target='_blank'>Logs</a>"
+        html += f"<a href='/start/{container.name}'>Start</a>"
+        html += f"<a href='/pause/{container.name}'>Pause</a>"
+        html += f"<a href='/stop/{container.name}'>Stop</a>"
+        html += "</td></tr>"
+    html += """
+        </table>
+    </body></html>
+    """
     return HTMLResponse(content=html)
 
 @app.post("/deploy")
@@ -77,7 +67,6 @@ async def deploy_code(file: UploadFile, app_name: str = Form(...)):
     with open(zip_path, "wb") as f:
         f.write(await file.read())
 
-    # Extract zip
     try:
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(project_path)
@@ -99,73 +88,64 @@ async def deploy_code(file: UploadFile, app_name: str = Form(...)):
             image=image_name,
             ports={'8080/tcp': None},
             name=container_name,
-            detach=True
+            detach=True,
+            mem_limit="512m",
+            nano_cpus=1_000_000_000,  # 1 CPU
+            read_only=True,
+            tmpfs={"/tmp": ""},
+            network=NETWORK_NAME,
+            user="1001:1001"
         )
 
-        time.sleep(1)
+        time.sleep(2)
         port = client.api.port(container.id, 8080)[0]['HostPort']
+
+        # Start ngrok tunnel with pyngrok
+        tunnel = ngrok.connect(port, bind_tls=True)
+        public_url = tunnel.public_url
+
         return JSONResponse({
             "project_id": project_id,
             "container_name": container_name,
-            "preview_url": f"http://localhost:{port}"
+            "preview_url": public_url
         })
 
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
-@app.get("/projects")
-def list_projects():
-    containers = client.containers.list(all=True)
-    result = []
-    for c in containers:
-        ports = client.api.port(c.id, 8080)
-        port = ports[0]['HostPort'] if ports else None
-        result.append({
-            "name": c.name,
-            "status": c.status,
-            "port": port,
-            "url": f"http://localhost:{port}" if port else None
-        })
-    return result
-
-@app.post("/stop/{container_name}")
-def stop_container(container_name: str):
-    try:
-        container = client.containers.get(container_name)
-        container.stop()
-        container.remove()
-        return {"status": "stopped", "container": container_name}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.post("/pause/{container_name}")
-def pause_container(container_name: str):
-    try:
-        container = client.containers.get(container_name)
-        container.pause()
-        return {"status": "paused", "container": container_name}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.post("/start/{container_name}")
-def start_container(container_name: str):
-    try:
-        container = client.containers.get(container_name)
-        container.unpause()
-        return {"status": "started", "container": container_name}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
 @app.get("/logs/{container_name}")
 def stream_logs(container_name: str):
     try:
         container = client.containers.get(container_name)
-        log_stream = container.logs(stream=True, follow=True)
-
-        def event_generator():
-            for line in log_stream:
-                yield f"data: {line.decode()}\n\n"
-
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
+        logs = container.logs(tail=100).decode()
+        return HTMLResponse(f"<pre>{logs}</pre>")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/start/{container_name}")
+def start_container(container_name: str):
+    try:
+        container = client.containers.get(container_name)
+        container.start()
+        return JSONResponse({"status": "started"})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/pause/{container_name}")
+def pause_container(container_name: str):
+    try:
+        container = client.containers.get(container_name)
+        container.pause()
+        return JSONResponse({"status": "paused"})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/stop/{container_name}")
+def stop_container(container_name: str):
+    try:
+        container = client.containers.get(container_name)
+        container.stop()
+        container.remove(force=True)
+        return JSONResponse({"status": "stopped and removed"})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)

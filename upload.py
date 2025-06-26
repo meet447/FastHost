@@ -27,8 +27,8 @@ if __name__ == "__main__":
     # Configuration
     folder_to_zip = "examples"               # Folder with main.py and requirements.txt
     zip_output = "project.zip"
-    app_name = "myfastapiapp"
-    server_url = "http://192.168.29.195:8000"  # Replace with your FastHost server
+    app_name = "maouapp"
+    server_url = ""
 
     print("📦 Zipping project...")
     zip_folder(folder_to_zip, zip_output)
