@@ -41,7 +41,7 @@ async def deploy_code(file: UploadFile, app_name: str = Form(...)):
         for fname in files:
             print(" -", os.path.join(dirpath, fname))
 
-    # Find required files inside the project folder
+    # Find required files inside the project folder (recursively)
     def find_file(filename, root):
         for dirpath, _, files in os.walk(root):
             if filename in files:
