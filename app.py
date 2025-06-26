@@ -18,6 +18,15 @@ client = docker.from_env()
 @app.get("/")
 def dashboard():
     containers = client.containers.list(all=True)
-    return containers
+    container_list = [
+        {
+            "id": container.id,
+            "name": container.name,
+            "status": container.status,
+            "image": container.image.tags
+        }
+        for container in containers
+    ]
+    return {"containers": container_list}
 
 
