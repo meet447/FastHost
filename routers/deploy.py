@@ -63,7 +63,7 @@ async def deploy_code(file: UploadFile, app_name: str = Form(...)):
 
     main_py = find_file("main.py", project_path)
     requirements_txt = find_file("requirements.txt", project_path)
-    dockerfile = find_file("Dockerfile", project_path)
+    dockerfile = find_file("DockerFile", project_path)
 
     missing_files = []
     if not main_py:
