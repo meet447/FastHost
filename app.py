@@ -7,6 +7,10 @@ import shutil
 import zipfile
 import time
 from pyngrok import ngrok
+import dotenv
+
+# Load environment variables
+dotenv.load_dotenv()
 
 app = FastAPI()
 client = docker.from_env()
@@ -126,7 +130,7 @@ def stream_logs(container_name: str):
 def start_container(container_name: str):
     try:
         container = client.containers.get(container_name)
-        container.start()
+        container.unpause()
         return JSONResponse({"status": "started"})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
