@@ -1,42 +1,47 @@
 from fastapi import APIRouter, HTTPException, UploadFile, Form
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import JSONResponse
 import docker
 import uuid
-from docker import client
 import zipfile
 import os
-import shutil
 import time
 from pyngrok import ngrok
 
-PROJECTS_DIR = "./projects"
-os.makedirs(PROJECTS_DIR, exist_ok=True)
-
-router =  APIRouter()
+router = APIRouter()
 
 @router.post("/project")
 async def deploy_code(file: UploadFile, app_name: str = Form(...)):
     if not file.filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="Only .zip files are supported")
 
+    # Create a unique project folder under /projects/<project_id>
     project_id = str(uuid.uuid4())
-    # Use absolute path based on current file location
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    projects_dir = os.path.join(base_dir, "..", "projects")
+    base_dir = os.path.dirname(os.path.abspath(__file__))  # /router/
+    projects_dir = os.path.abspath(os.path.join(base_dir, "..", "projects"))
     os.makedirs(projects_dir, exist_ok=True)
+
     project_path = os.path.join(projects_dir, project_id)
     os.makedirs(project_path, exist_ok=True)
 
+    # Save uploaded zip to that folder
     zip_path = os.path.join(project_path, file.filename)
     with open(zip_path, "wb") as f:
         f.write(await file.read())
+
+    # Extract zip contents into the project folder
     try:
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(project_path)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid zip file: {str(e)}")
 
-    # Recursively search for required files
+    # Debug: Show all extracted files
+    print(f"[DEBUG] Extracted files in: {project_path}")
+    for dirpath, _, files in os.walk(project_path):
+        for fname in files:
+            print(" -", os.path.join(dirpath, fname))
+
+    # Find required files inside the project folder
     def find_file(filename, root):
         for dirpath, _, files in os.walk(root):
             if filename in files:
@@ -48,16 +53,22 @@ async def deploy_code(file: UploadFile, app_name: str = Form(...)):
     dockerfile = find_file("Dockerfile", project_path)
 
     if not (main_py and requirements_txt and dockerfile):
-        raise HTTPException(status_code=400, detail="Zip must contain main.py, requirements.txt, and Dockerfile")
+        raise HTTPException(
+            status_code=400,
+            detail="Zip must contain main.py, requirements.txt, and Dockerfile (at any level)"
+        )
 
+    # Build and run Docker container
     image_name = f"{app_name.lower()}_{project_id[:8]}"
     container_name = image_name
 
     try:
-        image, _ = client.images.build(path=project_path, tag=image_name)
-        container = client.containers.run(
+        docker_client = docker.from_env()
+        image, _ = docker_client.images.build(path=project_path, tag=image_name)
+
+        container = docker_client.containers.run(
             image=image_name,
-            ports={'8080/tcp': None},
+            ports={"8080/tcp": None},
             name=container_name,
             detach=True,
             mem_limit="512m",
@@ -67,10 +78,14 @@ async def deploy_code(file: UploadFile, app_name: str = Form(...)):
             user="1001:1001"
         )
 
-        time.sleep(2)
-        port = client.api.port(container.id, 8080)[0]['HostPort']
+        time.sleep(2)  # Give Docker time to assign port
 
-        # Start ngrok tunnel with pyngrok
+        port_info = docker_client.api.port(container.id, 8080)
+        if not port_info:
+            raise Exception("Port 8080 not exposed by container")
+        port = port_info[0]['HostPort']
+
+        # Expose with ngrok
         tunnel = ngrok.connect(port, bind_tls=True)
         public_url = tunnel.public_url
 
