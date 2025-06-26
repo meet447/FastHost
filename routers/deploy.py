@@ -37,7 +37,7 @@ async def deploy_code(file: UploadFile, app_name: str = Form(...)):
             os.path.isfile(os.path.join(project_path, "requirements.txt"))):
         raise HTTPException(status_code=400, detail="Zip must contain main.py and requirements.txt")
 
-    shutil.copy("Dockerfile", project_path)
+    shutil.copy("./Dockerfile", project_path)
 
     image_name = f"{app_name.lower()}_{project_id[:8]}"
     container_name = image_name
