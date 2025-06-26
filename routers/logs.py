@@ -5,7 +5,7 @@ from docker import client
 
 router = APIRouter()
 
-@router.get("/logs/{container_name}")
+@router.get("/fetch/{container_name}")
 def stream_logs(container_name: str):
     try:
         container = client.containers.get(container_name)

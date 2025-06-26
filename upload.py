@@ -18,7 +18,7 @@ def upload_zip(zip_path, app_name, server_url):
     with open(zip_path, 'rb') as f:
         files = {'file': (os.path.basename(zip_path), f, 'application/zip')}
         data = {'app_name': app_name}
-        response = requests.post(f'{server_url}/deploy', files=files, data=data)
+        response = requests.post(f'{server_url}/deploy/project', files=files, data=data)
 
     if response.status_code == 200:
         print("✅ Deployed Successfully!")

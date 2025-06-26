@@ -14,7 +14,7 @@ os.makedirs(PROJECTS_DIR, exist_ok=True)
 
 router =  APIRouter()
 
-@router.post("/deploy")
+@router.post("/project")
 async def deploy_code(file: UploadFile, app_name: str = Form(...)):
     if not file.filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="Only .zip files are supported")

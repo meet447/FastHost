@@ -9,9 +9,9 @@ from routers.logs import router as logs_router
 dotenv.load_dotenv()
 
 app = FastAPI()
-app.include_router(controls_router, prefix="/")
-app.include_router(logs_router, prefix="/")
-app.include_router(deploy_router, prefix="/")
+app.include_router(controls_router, prefix="/controls")
+app.include_router(logs_router, prefix="/logs")
+app.include_router(deploy_router, prefix="/deploy")
 
 client = docker.from_env()
 
