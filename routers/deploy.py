@@ -20,22 +20,26 @@ async def deploy_code(file: UploadFile, app_name: str = Form(...)):
         raise HTTPException(status_code=400, detail="Only .zip files are supported")
 
     project_id = str(uuid.uuid4())
-    project_path = os.path.join(PROJECTS_DIR, project_id)
+    # Use absolute path based on current file location
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    projects_dir = os.path.join(base_dir, "..", "projects")
+    os.makedirs(projects_dir, exist_ok=True)
+    project_path = os.path.join(projects_dir, project_id)
     os.makedirs(project_path, exist_ok=True)
 
     zip_path = os.path.join(project_path, file.filename)
     with open(zip_path, "wb") as f:
         f.write(await file.read())
-        try:
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                zip_ref.extractall(project_path)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid zip file: {str(e)}")
+    try:
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(project_path)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid zip file: {str(e)}")
 
-        if not (os.path.isfile(os.path.join(project_path, "main.py")) and
-                os.path.isfile(os.path.join(project_path, "requirements.txt")) and
-                os.path.isfile(os.path.join(project_path, "Dockerfile"))):
-            raise HTTPException(status_code=400, detail="Zip must contain main.py, requirements.txt, and Dockerfile")
+    if not (os.path.isfile(os.path.join(project_path, "main.py")) and
+            os.path.isfile(os.path.join(project_path, "requirements.txt")) and
+            os.path.isfile(os.path.join(project_path, "Dockerfile"))):
+        raise HTTPException(status_code=400, detail="Zip must contain main.py, requirements.txt, and Dockerfile")
 
     image_name = f"{app_name.lower()}_{project_id[:8]}"
     container_name = image_name
