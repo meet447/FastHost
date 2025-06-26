@@ -5,6 +5,8 @@ from docker import client
 
 router = APIRouter()
 
+docker_client = docker.from_env()
+
 @router.get("/start/{container_name}")
 def start_container(container_name: str):
     try:
