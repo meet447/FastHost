@@ -31,7 +31,20 @@ async def deploy_code(file: UploadFile, app_name: str = Form(...)):
     # Extract zip contents into the project folder
     try:
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(project_path)
+            # If all files are inside a single top-level directory, extract their contents directly
+            members = zip_ref.namelist()
+            top_level_dirs = set(m.split('/')[0] for m in members if '/' in m)
+            if len(top_level_dirs) == 1 and all(m.startswith(list(top_level_dirs)[0] + '/') for m in members):
+                for member in members:
+                    target = os.path.join(project_path, os.path.relpath(member, list(top_level_dirs)[0]))
+                    if member.endswith('/'):
+                        os.makedirs(target, exist_ok=True)
+                    else:
+                        os.makedirs(os.path.dirname(target), exist_ok=True)
+                        with zip_ref.open(member) as source, open(target, "wb") as dest:
+                            dest.write(source.read())
+            else:
+                zip_ref.extractall(project_path)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid zip file: {str(e)}")
 
