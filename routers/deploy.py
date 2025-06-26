@@ -26,18 +26,16 @@ async def deploy_code(file: UploadFile, app_name: str = Form(...)):
     zip_path = os.path.join(project_path, file.filename)
     with open(zip_path, "wb") as f:
         f.write(await file.read())
+        try:
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(project_path)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid zip file: {str(e)}")
 
-    try:
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(project_path)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid zip file: {str(e)}")
-
-    if not (os.path.isfile(os.path.join(project_path, "main.py")) and
-            os.path.isfile(os.path.join(project_path, "requirements.txt"))):
-        raise HTTPException(status_code=400, detail="Zip must contain main.py and requirements.txt")
-
-    shutil.copy("Dockerfile", project_path)
+        if not (os.path.isfile(os.path.join(project_path, "main.py")) and
+                os.path.isfile(os.path.join(project_path, "requirements.txt")) and
+                os.path.isfile(os.path.join(project_path, "Dockerfile"))):
+            raise HTTPException(status_code=400, detail="Zip must contain main.py, requirements.txt, and Dockerfile")
 
     image_name = f"{app_name.lower()}_{project_id[:8]}"
     container_name = image_name
