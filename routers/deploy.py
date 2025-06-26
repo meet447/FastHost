@@ -36,9 +36,18 @@ async def deploy_code(file: UploadFile, app_name: str = Form(...)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid zip file: {str(e)}")
 
-    if not (os.path.isfile(os.path.join(project_path, "main.py")) and
-            os.path.isfile(os.path.join(project_path, "requirements.txt")) and
-            os.path.isfile(os.path.join(project_path, "Dockerfile"))):
+    # Recursively search for required files
+    def find_file(filename, root):
+        for dirpath, _, files in os.walk(root):
+            if filename in files:
+                return os.path.join(dirpath, filename)
+        return None
+
+    main_py = find_file("main.py", project_path)
+    requirements_txt = find_file("requirements.txt", project_path)
+    dockerfile = find_file("Dockerfile", project_path)
+
+    if not (main_py and requirements_txt and dockerfile):
         raise HTTPException(status_code=400, detail="Zip must contain main.py, requirements.txt, and Dockerfile")
 
     image_name = f"{app_name.lower()}_{project_id[:8]}"
