@@ -13,7 +13,7 @@ router = APIRouter()
 async def deploy_code(file: UploadFile, app_name: str = Form(...)):
     if not file.filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="Only .zip files are supported")
-
+    
     # Create unique project directory
     project_id = str(uuid.uuid4())
     base_dir = os.path.dirname(os.path.abspath(__file__))  # /router/
@@ -82,6 +82,11 @@ async def deploy_code(file: UploadFile, app_name: str = Form(...)):
 
     try:
         docker_client = docker.from_env()
+        for c in docker_client.containers.list(all=True):
+            if c.status in ["created", "exited"]:
+                print(f"Removing leftover container {c.name} ({c.id})")
+                c.remove(force=True)
+                
         image, _ = docker_client.images.build(path=project_path, tag=image_name)
 
         container = docker_client.containers.run(
