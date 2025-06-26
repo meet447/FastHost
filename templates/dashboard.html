@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FastHost Dashboard</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f8f9fa;
+      padding: 20px;
+    }
+    h1 {
+      color: #343a40;
+    }
+    .card {
+      background: white;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .buttons button {
+      margin-right: 5px;
+    }
+    pre {
+      background: #e9ecef;
+      padding: 10px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>🚀 FastHost Dashboard</h1>
+  <div id="projects"></div>
+
+  <script>
+    async function fetchProjects() {
+      const res = await fetch('/projects');
+      const data = await res.json();
+      const container = document.getElementById('projects');
+      container.innerHTML = '';
+
+      data.forEach(proj => {
+        const card = document.createElement('div');
+        card.className = 'card';
+
+        card.innerHTML = `
+          <h3>${proj.name}</h3>
+          <p>Status: <b>${proj.status}</b></p>
+          <p>URL: <a href="${proj.url}" target="_blank">${proj.url}</a></p>
+          <div class="buttons">
+            <button onclick="stopProject('${proj.name}')">🛑 Stop</button>
+            <button onclick="startProject('${proj.name}')">▶️ Start</button>
+            <button onclick="pauseProject('${proj.name}')">⏸️ Pause</button>
+            <button onclick="toggleLogs('${proj.name}')">📜 View Logs</button>
+          </div>
+          <pre id="log-${proj.name}" style="display:none"></pre>
+        `;
+
+        container.appendChild(card);
+      });
+    }
+
+    async function stopProject(name) {
+      await fetch(`/stop/${name}`, { method: 'POST' });
+      fetchProjects();
+    }
+
+    async function startProject(name) {
+      alert('Start functionality is not implemented via FastAPI yet.');
+    }
+
+    async function pauseProject(name) {
+      alert('Pause functionality is not implemented via FastAPI yet.');
+    }
+
+    function toggleLogs(name) {
+      const pre = document.getElementById(`log-${name}`);
+      if (pre.style.display === 'none') {
+        pre.style.display = 'block';
+        streamLogs(name, pre);
+      } else {
+        pre.style.display = 'none';
+      }
+    }
+
+    function streamLogs(name, target) {
+      const evtSrc = new EventSource(`/logs/${name}`);
+      evtSrc.onmessage = function (event) {
+        target.textContent += event.data + "\n";
+        target.scrollTop = target.scrollHeight;
+      };
+      evtSrc.onerror = () => evtSrc.close();
+    }
+
+    fetchProjects();
+  </script>
+</body>
+</html>
