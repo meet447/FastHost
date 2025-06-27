@@ -29,7 +29,7 @@ def upload_zip(zip_path, app_name, server_url):
 
 if __name__ == "__main__":
     # Configuration
-    folder_to_zip = "examples"               # Folder with main.py and requirements.txt
+    folder_to_zip = "examples/test"               # Folder with main.py and requirements.txt
     zip_output = "project.zip"
     app_name = "maouapp"
     server_url = 'http://192.168.29.195:8000'  # Replace with your server URL

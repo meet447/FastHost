@@ -7,3 +7,4 @@ __pycache__
 .env
 *.env.*
 project.zip
+examples/test
