@@ -6,54 +6,27 @@ import zipfile
 import os
 import time
 from pyngrok import ngrok
+import git
 
 router = APIRouter()
+ngrok_url = {}
 
-@router.post("/project")
-async def deploy_code(file: UploadFile, app_name: str = Form(...)):
-    if not file.filename.endswith(".zip"):
-        raise HTTPException(status_code=400, detail="Only .zip files are supported")
-    
-    # Create unique project directory
-    project_id = str(uuid.uuid4())
-    base_dir = os.path.dirname(os.path.abspath(__file__))  # /router/
-    projects_dir = os.path.abspath(os.path.join(base_dir, "..", "projects"))
-    os.makedirs(projects_dir, exist_ok=True)
+def find_file(filename, root):
+    filename = filename.lower()
+    for dirpath, _, files in os.walk(root):
+        for file in files:
+            if file.lower() == filename:
+                return os.path.join(dirpath, file)
+    return None
 
-    project_path = os.path.join(projects_dir, project_id)
-    os.makedirs(project_path, exist_ok=True)
-
-    # Save uploaded zip
-    zip_path = os.path.join(project_path, file.filename)
-    with open(zip_path, "wb") as f:
-        f.write(await file.read())
-
-    # Extract zip contents
-    try:
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(project_path)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid zip file: {str(e)}")
-
-    # Debug: print all extracted files
-    print(f"[DEBUG] Extracted files in: {project_path}")
-    for dirpath, _, files in os.walk(project_path):
-        for fname in files:
-            print(" -", os.path.join(dirpath, fname))
-
-    # Case-insensitive recursive search for file
-    def find_file(filename, root):
-        filename = filename.lower()
-        for dirpath, _, files in os.walk(root):
-            for file in files:
-                if file.lower() == filename:
-                    return os.path.join(dirpath, file)
-        return None
-
+def deploy_project(project_path: str, app_name: str):
+    project_id = os.path.basename(project_path)
+    image_name = f"{app_name.lower()}_{project_id[:8]}"
+    container_name = image_name
 
     main_py = find_file("main.py", project_path)
     requirements_txt = find_file("requirements.txt", project_path)
-    dockerfile = find_file("Dockerfile", project_path)  # lowercase f
+    dockerfile = find_file("Dockerfile", project_path)
 
     missing_files = []
     if not main_py:
@@ -66,19 +39,14 @@ async def deploy_code(file: UploadFile, app_name: str = Form(...)):
     if missing_files:
         raise HTTPException(
             status_code=400,
-            detail=f"Zip is missing required file(s): {', '.join(missing_files)} (case-insensitive)"
+            detail=f"Project is missing required file(s): {', '.join(missing_files)} (case-insensitive)"
         )
 
-    # Move Dockerfile to root if needed
     if os.path.dirname(dockerfile) != project_path:
         print(f"[DEBUG] Moving Dockerfile from {dockerfile} to project root")
         target_path = os.path.join(project_path, "Dockerfile")
         os.replace(dockerfile, target_path)
         dockerfile = target_path
-
-    # Build and run Docker container
-    image_name = f"{app_name.lower()}_{project_id[:8]}"
-    container_name = image_name
 
     try:
         docker_client = docker.from_env()
@@ -110,6 +78,7 @@ async def deploy_code(file: UploadFile, app_name: str = Form(...)):
 
         tunnel = ngrok.connect(port, bind_tls=True)
         public_url = tunnel.public_url
+        ngrok_url[container_name] = public_url
 
         return JSONResponse({
             "project_id": project_id,
@@ -119,3 +88,54 @@ async def deploy_code(file: UploadFile, app_name: str = Form(...)):
 
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
+
+@router.post("/project")
+async def deploy_code(file: UploadFile, app_name: str = Form(...)):
+    if not file.filename.endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Only .zip files are supported")
+    
+    project_id = str(uuid.uuid4())
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    projects_dir = os.path.abspath(os.path.join(base_dir, "..", "projects"))
+    os.makedirs(projects_dir, exist_ok=True)
+
+    project_path = os.path.join(projects_dir, project_id)
+    os.makedirs(project_path, exist_ok=True)
+
+    zip_path = os.path.join(project_path, file.filename)
+    with open(zip_path, "wb") as f:
+        f.write(await file.read())
+
+    try:
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(project_path)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid zip file: {str(e)}")
+
+    print(f"[DEBUG] Extracted files in: {project_path}")
+    for dirpath, _, files in os.walk(project_path):
+        for fname in files:
+            print(" -", os.path.join(dirpath, fname))
+    
+    return deploy_project(project_path, app_name)
+
+@router.post("/github")
+async def deploy_github(repo_url: str = Form(...), app_name: str = Form(...)):
+    project_id = str(uuid.uuid4())
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    projects_dir = os.path.abspath(os.path.join(base_dir, "..", "projects"))
+    os.makedirs(projects_dir, exist_ok=True)
+
+    project_path = os.path.join(projects_dir, project_id)
+
+    try:
+        git.Repo.clone_from(repo_url, project_path)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to clone repository: {str(e)}")
+
+    print(f"[DEBUG] Cloned repository to: {project_path}")
+    for dirpath, _, files in os.walk(project_path):
+        for fname in files:
+            print(" -", os.path.join(dirpath, fname))
+
+    return deploy_project(project_path, app_name)

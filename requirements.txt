@@ -1,7 +1,8 @@
-docker 
+docker
 FastAPI
 uvicorn
 pyngrok
 jinja2
 requests
 python-dotenv
+GitPython

@@ -1,7 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse
 import docker
-from docker import client
 
 router = APIRouter()
 
@@ -10,7 +9,7 @@ docker_client = docker.from_env()
 @router.get("/start/{container_name}")
 def start_container(container_name: str):
     try:
-        container = client.containers.get(container_name)
+        container = docker_client.containers.get(container_name)
         container.unpause()
         return JSONResponse({"status": "started"})
     except Exception as e:
@@ -19,7 +18,7 @@ def start_container(container_name: str):
 @router.get("/pause/{container_name}")
 def pause_container(container_name: str):
     try:
-        container = client.containers.get(container_name)
+        container = docker_client.containers.get(container_name)
         container.pause()
         return JSONResponse({"status": "paused"})
     except Exception as e:
@@ -28,7 +27,7 @@ def pause_container(container_name: str):
 @router.get("/stop/{container_name}")
 def stop_container(container_name: str):
     try:
-        container = client.containers.get(container_name)
+        container = docker_client.containers.get(container_name)
         container.stop()
         container.remove(force=True)
         return JSONResponse({"status": "stopped and removed"})

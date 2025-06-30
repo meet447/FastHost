@@ -29,51 +29,136 @@
       max-height: 200px;
       overflow-y: auto;
     }
+    .deploy-form {
+      margin-bottom: 20px;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      background: #fff;
+    }
+    .deploy-form input[type="text"],
+    .deploy-form input[type="file"] {
+      width: calc(100% - 22px);
+      padding: 10px;
+      margin-bottom: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    .deploy-form button {
+      padding: 10px 15px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .deploy-form button:hover {
+      background-color: #0056b3;
+    }
   </style>
 </head>
 <body>
   <h1>🚀 FastHost Dashboard</h1>
-  <div id="projects"></div>
+
+  <div class="deploy-form">
+    <h2>Deploy from GitHub</h2>
+    <input type="text" id="githubRepoUrl" placeholder="GitHub Repository URL (e.g., https://github.com/user/repo)">
+    <input type="text" id="githubAppName" placeholder="Application Name">
+    <button onclick="deployFromGitHub()">Deploy from GitHub</button>
+  </div>
+
+  <div class="deploy-form">
+    <h2>Deploy from Zip</h2>
+    <input type="file" id="zipFile" accept=".zip">
+    <input type="text" id="zipAppName" placeholder="Application Name">
+    <button onclick="deployFromZip()">Deploy from Zip</button>
+  </div>
+
+  <div id="projects">
+    {% for container in containers %}
+    <div class="card">
+      <h3>{{ container.name }}</h3>
+      <p>Status: <b>{{ container.status }}</b></p>
+      <p>URL: <a href="{{ ngrok_url.get(container.name) }}" target="_blank">{{ ngrok_url.get(container.name) }}</a></p>
+      <div class="buttons">
+        <button onclick="stopProject('{{ container.name }}')">🛑 Stop</button>
+        <button onclick="startProject('{{ container.name }}')">▶️ Start</button>
+        <button onclick="pauseProject('{{ container.name }}')">⏸️ Pause</button>
+        <button onclick="toggleLogs('{{ container.name }}')">📜 View Logs</button>
+      </div>
+      <pre id="log-{{ container.name }}" style="display:none"></pre>
+    </div>
+    {% endfor %}
+  </div>
 
   <script>
-    async function fetchProjects() {
-      const res = await fetch('/projects');
-      const data = await res.json();
-      const container = document.getElementById('projects');
-      container.innerHTML = '';
+    async function deployFromGitHub() {
+      const repoUrl = document.getElementById('githubRepoUrl').value;
+      const appName = document.getElementById('githubAppName').value;
 
-      data.forEach(proj => {
-        const card = document.createElement('div');
-        card.className = 'card';
+      if (!repoUrl || !appName) {
+        alert('Please enter both GitHub Repository URL and Application Name.');
+        return;
+      }
 
-        card.innerHTML = `
-          <h3>${proj.name}</h3>
-          <p>Status: <b>${proj.status}</b></p>
-          <p>URL: <a href="${proj.url}" target="_blank">${proj.url}</a></p>
-          <div class="buttons">
-            <button onclick="stopProject('${proj.name}')">🛑 Stop</button>
-            <button onclick="startProject('${proj.name}')">▶️ Start</button>
-            <button onclick="pauseProject('${proj.name}')">⏸️ Pause</button>
-            <button onclick="toggleLogs('${proj.name}')">📜 View Logs</button>
-          </div>
-          <pre id="log-${proj.name}" style="display:none"></pre>
-        `;
+      const formData = new FormData();
+      formData.append('repo_url', repoUrl);
+      formData.append('app_name', appName);
 
-        container.appendChild(card);
+      const res = await fetch('/deploy/github', {
+        method: 'POST',
+        body: formData,
       });
+
+      const data = await res.json();
+      if (res.ok) {
+        alert(`Deployment successful! Preview URL: ${data.preview_url}`);
+        location.reload();
+      } else {
+        alert(`Deployment failed: ${data.error}`);
+      }
+    }
+
+    async function deployFromZip() {
+      const zipFile = document.getElementById('zipFile').files[0];
+      const appName = document.getElementById('zipAppName').value;
+
+      if (!zipFile || !appName) {
+        alert('Please select a zip file and enter an Application Name.');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', zipFile);
+      formData.append('app_name', appName);
+
+      const res = await fetch('/deploy/project', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        alert(`Deployment successful! Preview URL: ${data.preview_url}`);
+        location.reload();
+      } else {
+        alert(`Deployment failed: ${data.error}`);
+      }
     }
 
     async function stopProject(name) {
-      await fetch(`/stop/${name}`, { method: 'POST' });
-      fetchProjects();
+      await fetch(`/controls/stop/${name}`);
+      location.reload();
     }
 
     async function startProject(name) {
-      alert('Start functionality is not implemented via FastAPI yet.');
+        await fetch(`/controls/start/${name}`);
+        location.reload();
     }
 
     async function pauseProject(name) {
-      alert('Pause functionality is not implemented via FastAPI yet.');
+        await fetch(`/controls/pause/${name}`);
+        location.reload();
     }
 
     function toggleLogs(name) {
@@ -87,15 +172,13 @@
     }
 
     function streamLogs(name, target) {
-      const evtSrc = new EventSource(`/logs/${name}`);
+      const evtSrc = new EventSource(`/logs/fetch/${name}`);
       evtSrc.onmessage = function (event) {
         target.textContent += event.data + "\n";
         target.scrollTop = target.scrollHeight;
       };
       evtSrc.onerror = () => evtSrc.close();
     }
-
-    fetchProjects();
   </script>
 </body>
 </html>
