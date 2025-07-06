@@ -7,6 +7,7 @@ import os
 import time
 from pyngrok import ngrok
 import git
+from config import PROJECTS_DIRECTORY
 
 router = APIRouter()
 ngrok_url = {}
@@ -19,7 +20,17 @@ def find_file(filename, root):
                 return os.path.join(dirpath, file)
     return None
 
-def deploy_project(project_path: str, app_name: str):
+def deploy_project(project_path: str, app_name: str) -> JSONResponse:
+    """
+    Deploys a project from a given path.
+
+    Args:
+        project_path: The absolute path to the project directory.
+        app_name: The name of the application.
+
+    Returns:
+        A JSONResponse with the deployment details or an error.
+    """
     project_id = os.path.basename(project_path)
     image_name = f"{app_name.lower()}_{project_id[:8]}"
     container_name = image_name
@@ -95,11 +106,9 @@ async def deploy_code(file: UploadFile, app_name: str = Form(...)):
         raise HTTPException(status_code=400, detail="Only .zip files are supported")
     
     project_id = str(uuid.uuid4())
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    projects_dir = os.path.abspath(os.path.join(base_dir, "..", "projects"))
-    os.makedirs(projects_dir, exist_ok=True)
+    os.makedirs(PROJECTS_DIRECTORY, exist_ok=True)
 
-    project_path = os.path.join(projects_dir, project_id)
+    project_path = os.path.join(PROJECTS_DIRECTORY, project_id)
     os.makedirs(project_path, exist_ok=True)
 
     zip_path = os.path.join(project_path, file.filename)
@@ -122,11 +131,9 @@ async def deploy_code(file: UploadFile, app_name: str = Form(...)):
 @router.post("/github")
 async def deploy_github(repo_url: str = Form(...), app_name: str = Form(...)):
     project_id = str(uuid.uuid4())
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    projects_dir = os.path.abspath(os.path.join(base_dir, "..", "projects"))
-    os.makedirs(projects_dir, exist_ok=True)
+    os.makedirs(PROJECTS_DIRECTORY, exist_ok=True)
 
-    project_path = os.path.join(projects_dir, project_id)
+    project_path = os.path.join(PROJECTS_DIRECTORY, project_id)
 
     try:
         git.Repo.clone_from(repo_url, project_path)
